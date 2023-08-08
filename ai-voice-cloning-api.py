@@ -170,27 +170,6 @@ def do_tts(  # Default to the pretty Holo voice
 
     print(r)
 
-    # Text to speech with a numpy output
-    # wav = tts.tts("This is a test! This is also a test!!", speaker=tts.speakers[0], language=tts.languages[0])
-
-    # print(len(split_text))
-    # print(split_text).
-
-    # for i in range(0, len(split_text)):
-    #     try:
-    #         # print(split_text[i])
-
-    #         # Text to speech to a file
-    #         tts.tts_to_file(
-    #             text=split_text[i],
-    #             speaker=SPEAKER,
-    #             language=LANGUAGE,
-    #             file_path="part_{0}.wav".format(i),
-    #         )
-    #     except Exception as e:
-    #         print(e)
-    #         continue
-
     progress_file = f"progress_{selection}.txt"
 
     if os.path.isfile(progress_file):
