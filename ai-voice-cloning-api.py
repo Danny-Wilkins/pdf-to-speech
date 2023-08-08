@@ -7,16 +7,6 @@ import socket
 import time
 import glob
 
-"""
-How do you want to do this?
-1. Enter a PDF. Browse for a file and convert it to text.
-2. Select a model from the list of models.
-3. Select a speaker and language, if available.
-4. Break the text into ~20,000 word pieces (~20 minutes of content per section)
-5. TTS and output to numbered files in a new `./<filename>/ folder`
-"""
-
-
 # PDF to text
 def convert_pdf(pdf_dir):
     path = pdf_dir
