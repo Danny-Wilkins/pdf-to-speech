@@ -3,6 +3,8 @@ A script/workflow for the conversion of PDFs to AI-generated speech.
 
 Developed and tested on Windows.
 
+Note that almost all file paths are currently hardcoded and will need to be adjusted for personal use. Will probably fix this in the future. 
+
 **Requirements**
 1. https://git.ecker.tech/mrq/ai-voice-cloning/wiki
 2. https://pypi.org/project/pypdf/
