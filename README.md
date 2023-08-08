@@ -5,6 +5,8 @@ Developed and tested on Windows.
 
 Note that almost all file paths are currently hardcoded and will need to be adjusted for personal use. Will probably fix this in the future. 
 
+Included is a sample audio file generated from this script, with no post-processing.
+
 **Requirements**
 1. https://git.ecker.tech/mrq/ai-voice-cloning/wiki
 2. https://pypi.org/project/pypdf/
