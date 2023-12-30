@@ -6,9 +6,22 @@ import subprocess
 import socket
 import time
 import glob
+import json
+import traceback
+import re
+
+"""
+How do you want to do this?
+1. Enter a PDF. Browse for a file and convert it to text.
+2. Select a model from the list of models.
+3. Select a speaker and language, if available.
+4. Break the text into ~20,000 word pieces (~20 minutes of content per section)
+5. TTS and output to numbered files in a new `./<filename>/ folder`
+"""
+
 
 # PDF to text
-def convert_pdf(pdf_dir):
+def convert_pdf(pdf_dir, replace_line_end_char):
     path = pdf_dir
 
     os.chdir(path)
@@ -44,18 +57,56 @@ def convert_pdf(pdf_dir):
                 full_text += " ".join(page)
 
             with open("full_text.txt", "w", encoding="utf-8") as f:
-                f.write(
-                    str(unidecode(full_text.replace("\xad ", "").replace("\xa0", " ").replace(". ", "...\n").replace("? ", "...\n").replace("! ", "...\n") + "...\n"))    # Decode weird quotations, apostrophes etc. and make them the closest ascii char
-                )  # Clean up PDF invisible hyphens + spaces and ...\n all the periods to use \n as a delimiter and make sure the AI doesn't cut the end of sentences, and one more at the end for the last sentence
+                f.write(full_text_cleanup(full_text, replace_line_end_char))
 
             return [
                 selection,
-                unidecode(full_text.replace("\xad", "").replace("\xa0", " ").replace(". ", "...\n").replace("? ", "...\n").replace("! ", "...\n") + "...\n"),
+                full_text_cleanup(full_text, replace_line_end_char),
             ]
 
         except (IndexError, ValueError):
             print("Invalid selection, please try again: ")
             continue
+
+
+def full_text_cleanup(full_text, replace_line_end_char):
+    # Decode weird quotations, apostrophes etc. and make them the closest ascii char
+    # Clean up PDF invisible hyphens + spaces and {replace_line_end_char} all the periods to use \n as a delimiter and make sure the AI doesn't cut the end of sentences, and one more at the end for the last sentence
+
+    # To-do - Implement some sort of spell check to help decide whether a word has been erroneously split in half?
+    cleaned_text = str(
+        unidecode(
+            full_text.replace("\xad ", "")  # Remove invisible characters
+            .replace("\xa0", " ")
+            .replace("  ", " ")  # Remove double spaces
+            .replace(
+                "- ", ""
+            )  # Sometimes words get cut by hyphens - stitch those back together. Some words are still cut by hyphens without spaces, but the voice doesn't always seem to regard them, and says the words properly, so it's often fine.
+            # Hard to fix though, cause hyphenated words are a real thing. Example, this speaks fine: "Encounters Like any encounter with cloak-and-dagger opera-tives", this doesn't: "tolerant of some freelance opera-tions among its agents"
+            .replace("\n ", "\n")  # Remove space at the beginning of a line/sentence
+            # To do - insert regex to remove page numbers (\d+ is match any number of digits - Five Nations example, had to remove KARRNATH \d+ to remove KARRNATH 101, KARRNATH 102 etc. from the middle of paragraphs)
+            # Removing all numbers may be too destructive, but I think there are random no-chapter page numbers laying around too - how to distinguish those from actual useful numbers?
+            .replace(
+                ". ", f"{replace_line_end_char}"
+            )  # Replace punctuation with custom line endings
+            .replace("? ", f"?{replace_line_end_char}")
+            .replace("! ", f"!{replace_line_end_char}")
+            + f"{replace_line_end_char}"  # Final line end
+        )
+    )
+
+    # Manual of the Planes fixes - where do I put these random one off fixes??
+    cleaned_text = re.sub("\d+ (Introduction|Appendix)", " ", cleaned_text)
+    cleaned_text = re.sub("(Introduction|Appendix) \d+", " ", cleaned_text)
+    cleaned_text = re.sub("Chapter \d+ \| (Character Creation|Planar Principia|The Great Wheel|Creatures of the Planes) \d+", " ", cleaned_text)
+    cleaned_text = re.sub("\d+ Chapter \d+ \| (Character Creation|Planar Principia|The Great Wheel|Creatures of the Planes)", " ", cleaned_text)
+    cleaned_text = re.sub("\d+ Chapter \d+ \| (Character Creation|Planar Principia|The Great Wheel|Creatures of the Planes)", " ", cleaned_text)
+    cleaned_text = re.sub("(?<=[\w])-(?=[\w])", "", cleaned_text)   # Just remove all hyphens cutting words, they're causing more trouble than it's worth saving hyphenated words
+
+    cleaned_text = cleaned_text.replace("T ", "T") \
+    .replace("Planescape", "plane scape")  # Fix Planescape pronunciation
+
+    return cleaned_text
 
 
 def break_text(full_text, words_per_chunk=60):
@@ -81,17 +132,21 @@ def break_text(full_text, words_per_chunk=60):
     return split_text
 
 
-def break_text_into_sentences(full_text, sentences_per_chunk=3):
+def break_text_into_sentences(
+    full_text, replace_line_end_char="\n", sentences_per_chunk=3
+):
     split_text = []
 
-    full_text = full_text.split("\n") # The split is needed to break it into sentences, but then we need to put the \n back on every sentence
+    full_text = full_text.split(
+        f"{replace_line_end_char}"
+    )  # The split is needed to break it into sentences, but then we need to put the \n back on every sentence
 
-    # print(full_text[:6])
+    print(full_text[2000:2006])
 
     split_text_step = []
 
     for sentence in full_text:
-        split_text_step.append(sentence + "\n")
+        split_text_step.append(sentence + f"{replace_line_end_char}")
 
     # print(split_text_step[:6])
 
@@ -152,12 +207,12 @@ def do_tts(  # Default to the pretty Holo voice
     if is_web_ui_up("127.0.0.1", 7860):
         print("Web UI is up, proceeding...")
     else:
-        print("Web UI is not up, starting now. Waiting 30 seconds...")
+        print("Web UI is not up, starting now. Waiting 60 seconds...")
 
         os.chdir("H:/Documents/Programs/PDF to MP3/ai-voice-cloning/")
         start_bat = "H:/Documents/Programs/PDF to MP3/ai-voice-cloning/start.bat"
         subprocess.Popen([start_bat])
-        time.sleep(30)
+        time.sleep(60)
 
     print(f"Setting autoregressive model to {autoregressive_model}...")
 
@@ -169,6 +224,27 @@ def do_tts(  # Default to the pretty Holo voice
     )
 
     print(r)
+
+    # Text to speech with a numpy output
+    # wav = tts.tts("This is a test! This is also a test!!", speaker=tts.speakers[0], language=tts.languages[0])
+
+    # print(len(split_text))
+    # print(split_text).
+
+    # for i in range(0, len(split_text)):
+    #     try:
+    #         # print(split_text[i])
+
+    #         # Text to speech to a file
+    #         tts.tts_to_file(
+    #             text=split_text[i],
+    #             speaker=SPEAKER,
+    #             language=LANGUAGE,
+    #             file_path="part_{0}.wav".format(i),
+    #         )
+    #     except Exception as e:
+    #         print(e)
+    #         continue
 
     progress_file = f"progress_{selection}.txt"
 
@@ -188,7 +264,9 @@ def do_tts(  # Default to the pretty Holo voice
 
             payload = {
                 "data": [
-                    text,  # 'Input Prompt' Textbox
+                    text.rstrip(
+                        line_delimiter
+                    ),  # Strip the last delimiter so the voice will stop trying to "say" it # 'Input Prompt' Textbox
                     line_delimiter,  # 'Line Delimiter' Textbox
                     emotion,  # 'Emotion' Radio component
                     custom_emotion,  # 'Custom Emotion' Textbox
@@ -214,6 +292,8 @@ def do_tts(  # Default to the pretty Holo voice
                 ]
             }
 
+            print(json.dumps(payload))
+
             response = requests.post(
                 "http://127.0.0.1:7860/run/generate", json=payload
             ).json()
@@ -222,16 +302,22 @@ def do_tts(  # Default to the pretty Holo voice
 
             data = response["data"]
 
-            print(data)
+            print(json.dumps(data))
+
+            # Write progress every chunk
+            with open(f"progress_{selection}.txt", "w", encoding="utf-8") as f:
+                f.write(str(progress))
 
             for filename in glob.glob(f"results/{voice}/*.json"):
-                os.remove(filename) #Clean out all the weird jsons
+                os.remove(filename)  # Clean out all the weird jsons
 
         except Exception as e:
             print(e)
+            print(traceback.format_exc())
+            # Skip section if there's an error/crash due to too long lines - it's probably a table or stat block.
             with open(f"progress_{selection}.txt", "w", encoding="utf-8") as f:
                 f.write(str(progress))
-            break
+            continue
 
 
 def is_web_ui_up(host, port, timeout=2):
@@ -247,39 +333,46 @@ def is_web_ui_up(host, port, timeout=2):
 
 
 def main():
-    selection, full_text = convert_pdf("H:/Documents/Programs/PDF to MP3/")
+    replace_line_end_char = "...\n"  # This is needed because some voices make weird noises at the end of a sentence, and changing the punctuation (usually . or ... or just \n) can fix it. Change to ...\n if lines are getting cut off at the end. This should ideally match the line delimiter.
+    selection, full_text = convert_pdf(
+        "H:/Documents/Programs/PDF to MP3/", replace_line_end_char
+    )
     # split_text = break_text(full_text, words_per_chunk=60)
-    split_text = break_text_into_sentences(full_text, sentences_per_chunk=3)
+    split_text = break_text_into_sentences(
+        full_text, replace_line_end_char, sentences_per_chunk=3
+    )
 
-    autoregressive_model = "H:/Documents/Programs/PDF to MP3/ai-voice-cloning/training/Holo/finetune/models/201_gpt.pth"
-    text = ""
-    line_delimiter = "..\\n"
-    emotion = "None"
-    custom_emotion = ""
-    voice = "Holo"
-    audio_component = {
-        "name": "audio.wav",
-        "data": "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=",
-    }  # represents audio data as object with filename and base64 string of 'Microphone Source' Audio component, not sure what this actually means, but it's required
-    voice_chunks = 0
-    candidates = 1
-    seed = 1688699678
-    samples = 2
-    iterations = 8
-    temperature = 0.4
-    diffusion_samplers = "DDIM"
-    pause_size = 6
-    cvvp_weight = 0
-    top_p = 0.8
-    diffusion_temperature = 0.8
-    length_penalty = 4
-    repetition_penalty = 6
-    conditioning_free_k = 2
-    experimental_flags = ["Conditioning-Free"]
-    original_latents_ar = False
-    original_latents_diffusion = False
-
-    do_tts(split_text, selection, line_delimiter=line_delimiter)
+    do_tts(
+        split_text,
+        selection,
+        autoregressive_model="H:/Documents/Programs/PDF to MP3/ai-voice-cloning/training/David_Attenborough/finetune/models/90_gpt.pth",  # "H:/Documents/Programs/PDF to MP3/ai-voice-cloning/training/Holo/finetune/models/201_gpt.pth"
+        #    text = "",
+        line_delimiter="\n",  # Some voices try to "say" the delimiter if it is the last character in the payload. Very annoying. If the delimiter ends with \n this should be fixed (\n is now rstripped from payload).
+        emotion="None",
+        custom_emotion="",
+        voice="David_Attenborough",  # "Holo"
+        audio_component={
+            "name": "audio.wav",
+            "data": "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=",
+        },  # represents audio data as object with filename and base64 string of 'Microphone Source' Audio component, not sure what this actually means, but it's required
+        voice_chunks=0,
+        candidates=1,
+        seed=1703820242,  # 1688699678
+        samples=2,
+        iterations=8,
+        temperature=0.4,
+        diffusion_samplers="DDIM",
+        pause_size=6,
+        cvvp_weight=0,
+        top_p=0.8,
+        diffusion_temperature=0.8,
+        length_penalty=4,
+        repetition_penalty=6,
+        conditioning_free_k=2,
+        experimental_flags=["Conditioning-Free"],
+        original_latents_ar=False,
+        original_latents_diffusion=False,
+    )
 
 
 if __name__ == "__main__":
