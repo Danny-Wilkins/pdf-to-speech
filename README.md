@@ -19,10 +19,11 @@ Included is a sample audio file generated from this script, with no post-process
 
 **What's cool about it**
 1. Takes any PDF and cleans it as much as reasonable before breaking it into AI-generatable chunks of roughly equal size (chunk size is adjustable)
-2. Ensures voice generation doesn't cut off in the middle of a sentence
-3. Brings up the voice generation UI/API automatically if it's not up
-4. Automatically passes in your chosen parameters (needs improvement - some way to have profiles)
-5. Saves progress as it goes so if it's interrupted partway, you don't have to start over (very jank - just a txt file saying which chunk you were on. Sometimes is off by a few chunks.)
+    a. Note - PDF to text is very difficult and imperfect - I've included some baseline cleanup that can apply to all PDFs (remove non-printing characters, weird line breaks, etc.) but other problems like page numbers in the middle of a paragraph are harder to deal with and should be done on a case-by-case basis.
+3. Ensures voice generation doesn't cut off in the middle of a sentence
+4. Brings up the voice generation UI/API automatically if it's not up
+5. Automatically passes in your chosen parameters (needs improvement - some way to have profiles)
+6. Saves progress as it goes so if it's interrupted partway, you don't have to start over (very jank - just a txt file saying which chunk you were on. Sometimes is off by a few chunks.)
 
 **To do**
 1. Make a web UI so you can change parameters, etc. without editing code
